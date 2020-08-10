@@ -5,6 +5,11 @@ import creds
 from datetime import date
 
 def getTodaysGames():
+    ###############
+    # Rework this #
+    ###############
+    # use the live game feed, loop through schedule to grab
+    # the gamePk ID and then loop through each to grab linescore
     print('Getting list of games for today...')
     url = 'https://statsapi.web.nhl.com/api/v1/schedule'
 
