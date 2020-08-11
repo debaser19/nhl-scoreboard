@@ -3,10 +3,11 @@ import json
 import pandas as pd
 import creds
 import pytz
-from datetime import date
+from datetime import date, datetime
 from dateutil.parser import parse
+import time
 
-url = url = 'https://statsapi.web.nhl.com/'
+url = 'https://statsapi.web.nhl.com/'
 
 def getGameIds():
     print('Grabbing game IDs...')
@@ -270,6 +271,11 @@ def postThread():
     topic_title = f'[{getCurrentDate()}] Out of Town Scoreboard'
 
     post_content = createScoresFeed()
+    current_time = datetime.now()
+    current_time = current_time.strftime('%b %d %Y %#I:%M:%S %p')
+
+    post_content += f'<p><strong>Last updated: {current_time}</strong></p>'
+
     
     # check if today's post is already created
     for pinned_topic in list_of_topics:
@@ -298,4 +304,7 @@ def postThread():
         r = requests.post(url,data=payload)
 
 
-postThread()
+while True:
+    postThread()
+    print(f'Current time: {datetime.now()}')
+    time.sleep(300)
