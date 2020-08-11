@@ -2,13 +2,15 @@ import requests
 import json
 import pandas as pd
 import creds
+import pytz
 from datetime import date
+from dateutil.parser import parse
 
 url = url = 'https://statsapi.web.nhl.com/'
 
 def getGameIds():
     print('Grabbing game IDs...')
-    endpoint = 'api/v1/schedule?date=2020-08-09'
+    endpoint = 'api/v1/schedule'
 
     r = requests.get(url+endpoint)
     data = r.json()
@@ -48,18 +50,43 @@ def parseGameFeeds():
         live_data = game_feed['feed']['liveData']
         print(f'Parsing feed for {game_feed["id"]}')
 
-        parsed_feed = {
-            "start_time": game_data['datetime']['dateTime'],
-            "end_time": game_data['datetime']['endDateTime'],
-            "game_state": game_data['status']['detailedState'],
-            "away_team": game_data['teams']['away']['name'],
-            "away_abbreviation": game_data['teams']['away']['abbreviation'],
-            "home_team": game_data['teams']['home']['name'],
-            "home_abbreviation": game_data['teams']['home']['abbreviation'],
-            "linescore": live_data['linescore'],
-            "boxscore": live_data['boxscore'],
-            "decisions": live_data['decisions']
-        }
+        # convert start time
+        start_time = game_data['datetime']['dateTime']
+        start_time = parse(start_time)
+        est_timezone = pytz.timezone('America/New_York')
+        start_time = start_time.astimezone(est_timezone)
+        start_time = start_time.strftime('%#I:%M %p')
+
+        print(start_time)
+
+
+        try:
+            parsed_feed = {
+                "start_time": start_time,
+                "end_time": game_data['datetime']['endDateTime'],
+                "game_state": game_data['status']['detailedState'],
+                "away_team": game_data['teams']['away']['name'],
+                "away_abbreviation": game_data['teams']['away']['abbreviation'],
+                "home_team": game_data['teams']['home']['name'],
+                "home_abbreviation": game_data['teams']['home']['abbreviation'],
+                "linescore": live_data['linescore'],
+                "boxscore": live_data['boxscore'],
+                "decisions": live_data['decisions']
+            }
+        except KeyError as e:
+            print(f'Key error: {e}')
+            parsed_feed = {
+                "start_time": start_time,
+                "end_time": "TBD",
+                "game_state": game_data['status']['detailedState'],
+                "away_team": game_data['teams']['away']['name'],
+                "away_abbreviation": game_data['teams']['away']['abbreviation'],
+                "home_team": game_data['teams']['home']['name'],
+                "home_abbreviation": game_data['teams']['home']['abbreviation'],
+                "linescore": live_data['linescore'],
+                "boxscore": live_data['boxscore'],
+                "decisions": live_data['decisions']
+            }
         parsed_feeds.append(parsed_feed)
     
     return parsed_feeds
@@ -103,15 +130,17 @@ def createScoresFeed():
     .headline ul li {
         list-style: none;
         display: inline;
-        padding: 10px
+        padding: 10px;
+        font-weight: bold;
     }
     </style>
     '''
 
     for feed in parsed_feeds:
         # get scores by period
-        totalHomeGoals = 0
-        totalAwayGoals = 0
+        totalHomeGoals = totalAwayGoals = 0
+        per1HomeGoals = per2HomeGoals = per3HomeGoals = 0
+        per1AwayGoals = per2AwayGoals = per3AwayGoals = 0
         for period in feed['linescore']['periods']:
             if period['num'] == 1:
                 per1HomeGoals = period['home']['goals']
@@ -129,7 +158,7 @@ def createScoresFeed():
                 per3AwayGoals = period['away']['goals']
                 totalAwayGoals += per3AwayGoals
 
-        if feed['decisions'] not in parsed_feeds:
+        if 'winner' in feed['decisions']:
             goalies_string = f'''
             <div class="goalies">
             <ul>
@@ -151,6 +180,10 @@ def createScoresFeed():
         else:
             goalies_string = ''
             threestars_string = ''
+
+        if 'currentPeriodOrdinal' not in feed['linescore']:
+            feed["linescore"]["currentPeriodOrdinal"] = feed['game_state']
+            feed["linescore"]["currentPeriodTimeRemaining"] = '00:00'
 
         linescore_string = f'''
         <div class="scoreboard-container">
@@ -203,4 +236,66 @@ def createScoresFeed():
     return post_content
 
 
-print(createScoresFeed())
+def getCurrentDate():
+    current_date = date.today()
+    month = current_date.month
+    day = current_date.day
+    year = current_date.year
+    formatted_date = f'{month}/{day}/{year}'
+
+    return formatted_date
+
+
+def postThread():
+    apikey = creds.creds['apikey']
+    url = f'http://leafsconnected.com/api/forums/topics?key={apikey}'
+
+    payload = {
+        "forums": [10],
+        "pinned": 1
+    }
+
+    r = requests.get(url,params=payload)
+    data = r.json()
+    topics = data['results']
+    
+    list_of_topics = []
+    for topic in topics:
+        topic_dict = {
+            "id": topic['id'],
+            "title": topic['title']
+        }
+        list_of_topics.append(topic_dict)
+
+    topic_title = f'[{getCurrentDate()}] Out of Town Scoreboard'
+
+    post_content = createScoresFeed()
+    
+    # check if today's post is already created
+    for pinned_topic in list_of_topics:
+        if topic_title not in pinned_topic['title']:
+            topic_exists = False
+        else:
+            topic_exists = True
+    if not topic_exists:
+        print("Creating topic...")
+        payload = {
+            "forum": 10,
+            "title": topic_title,
+            "post": post_content,
+            "author": 2,
+            "pinned": 1
+        }
+        r = requests.post(url,data=payload)
+    else:
+        # create it if it doesn't exist
+        print("Updating post...")
+        post_id = topic['firstPost']['id']
+        url = f'http://leafsconnected.com/api/forums/posts/{post_id}?key={apikey}'
+        payload = {
+            "post": post_content
+        }
+        r = requests.post(url,data=payload)
+
+
+postThread()
