@@ -56,10 +56,7 @@ def parseGameFeeds():
         start_time = parse(start_time)
         est_timezone = pytz.timezone('America/New_York')
         start_time = start_time.astimezone(est_timezone)
-        start_time = start_time.strftime('%#I:%M %p')
-
-        print(start_time)
-
+        start_time = start_time.strftime('%I:%M %p')
 
         try:
             parsed_feed = {
@@ -75,7 +72,7 @@ def parseGameFeeds():
                 "decisions": live_data['decisions']
             }
         except KeyError as e:
-            print(f'Key error: {e}')
+            print(f'Game not finished - no decisions: {e}')
             parsed_feed = {
                 "start_time": start_time,
                 "end_time": "TBD",
@@ -139,25 +136,18 @@ def createScoresFeed():
 
     for feed in parsed_feeds:
         # get scores by period
-        totalHomeGoals = totalAwayGoals = 0
         per1HomeGoals = per2HomeGoals = per3HomeGoals = 0
         per1AwayGoals = per2AwayGoals = per3AwayGoals = 0
         for period in feed['linescore']['periods']:
             if period['num'] == 1:
                 per1HomeGoals = period['home']['goals']
-                totalHomeGoals += per1HomeGoals
                 per1AwayGoals = period['away']['goals']
-                totalAwayGoals += per1AwayGoals
             elif period['num'] == 2:
                 per2HomeGoals = period['home']['goals']
-                totalHomeGoals += per2HomeGoals
                 per2AwayGoals = period['away']['goals']
-                totalAwayGoals += per2AwayGoals
             elif period['num'] == 3:
                 per3HomeGoals = period['home']['goals']
-                totalHomeGoals += per3HomeGoals
                 per3AwayGoals = period['away']['goals']
-                totalAwayGoals += per3AwayGoals
 
         if 'winner' in feed['decisions']:
             goalies_string = f'''
@@ -168,7 +158,10 @@ def createScoresFeed():
             </ul>
             </div>
             '''
+        else:
+            goalies_string = ''
 
+        if 'firstStar' in feed['decisions']:
             threestars_string = f'''
             <div class="threestars">
             <ul>
@@ -179,12 +172,14 @@ def createScoresFeed():
             </div>
             '''
         else:
-            goalies_string = ''
             threestars_string = ''
 
         if 'currentPeriodOrdinal' not in feed['linescore']:
             feed["linescore"]["currentPeriodOrdinal"] = feed['game_state']
             feed["linescore"]["currentPeriodTimeRemaining"] = '00:00'
+
+        totalAwayGoals = feed['linescore']['teams']['away']['goals']
+        totalHomeGoals = feed['linescore']['teams']['home']['goals']
 
         linescore_string = f'''
         <div class="scoreboard-container">
@@ -213,14 +208,14 @@ def createScoresFeed():
         <td>{per1AwayGoals}</td>
         <td>{per2AwayGoals}</td>
         <td>{per3AwayGoals}</td>
-        <td>{totalAwayGoals}</td>
+        <td><strong>{totalAwayGoals}</strong></td>
         </tr>
         <tr>
         <td>{feed["home_abbreviation"]}</td>
         <td>{per1HomeGoals}</td>
         <td>{per2HomeGoals}</td>
         <td>{per3HomeGoals}</td>
-        <td>{totalHomeGoals}</td>
+        <td><strong>{totalHomeGoals}</strong></td>
         </tr>
         </tbody>
         </table>
@@ -272,7 +267,7 @@ def postThread():
 
     post_content = createScoresFeed()
     current_time = datetime.now()
-    current_time = current_time.strftime('%b %d %Y %#I:%M:%S %p')
+    current_time = current_time.strftime('%b %d %Y %I:%M:%S %p')
 
     post_content += f'<p><strong>Last updated: {current_time}</strong></p>'
 
@@ -304,7 +299,4 @@ def postThread():
         r = requests.post(url,data=payload)
 
 
-while True:
-    postThread()
-    print(f'Current time: {datetime.now()}')
-    time.sleep(300)
+postThread()
