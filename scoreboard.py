@@ -1,19 +1,19 @@
-import requests
-import json
-import pandas as pd
-import creds
-import pytz
 from datetime import date, datetime
+
+import pytz
+import requests
 from dateutil.parser import parse
-import time
+
+import creds
 
 url = 'https://statsapi.web.nhl.com/'
 
-def getGameIds():
+
+def get_game_ids():
     print('Grabbing game IDs...')
     endpoint = 'api/v1/schedule'
 
-    r = requests.get(url+endpoint)
+    r = requests.get(url + endpoint)
     data = r.json()
 
     game_ids = []
@@ -21,18 +21,18 @@ def getGameIds():
     for date in data['dates']:
         for game in date['games']:
             game_ids.append(game['gamePk'])
-    
+
     print(f'Game IDs: {game_ids}')
 
     return game_ids
 
 
-def getGameFeeds():
-    game_ids = getGameIds()
+def get_game_feeds():
+    game_ids = get_game_ids()
     game_feeds = []
     for game_id in game_ids:
         endpoint = f'/api/v1/game/{game_id}/feed/live'
-        r = requests.get(url+endpoint)
+        r = requests.get(url + endpoint)
         data = r.json()
         game_feed_dict = {
             "id": game_id,
@@ -43,8 +43,8 @@ def getGameFeeds():
     return game_feeds
 
 
-def parseGameFeeds():
-    game_feeds = getGameFeeds()
+def parse_game_feeds():
+    game_feeds = get_game_feeds()
     parsed_feeds = []
     for game_feed in game_feeds:
         game_data = game_feed['feed']['gameData']
@@ -86,12 +86,12 @@ def parseGameFeeds():
                 "decisions": live_data['decisions']
             }
         parsed_feeds.append(parsed_feed)
-    
+
     return parsed_feeds
 
 
-def createScoresFeed():
-    parsed_feeds = parseGameFeeds()
+def create_scores_feed():
+    parsed_feeds = parse_game_feeds()
     post_content = ''
     style_string = '''
     <style>
@@ -232,7 +232,7 @@ def createScoresFeed():
     return post_content
 
 
-def getCurrentDate():
+def get_current_date():
     current_date = date.today()
     month = current_date.month
     day = current_date.day
@@ -242,7 +242,7 @@ def getCurrentDate():
     return formatted_date
 
 
-def postThread():
+def post_thread():
     apikey = creds.creds['apikey']
     url = f'http://leafsconnected.com/api/forums/topics?key={apikey}'
 
@@ -251,10 +251,10 @@ def postThread():
         "pinned": 1
     }
 
-    r = requests.get(url,params=payload)
+    r = requests.get(url, params=payload)
     data = r.json()
     topics = data['results']
-    
+
     list_of_topics = []
     for topic in topics:
         topic_dict = {
@@ -263,15 +263,14 @@ def postThread():
         }
         list_of_topics.append(topic_dict)
 
-    topic_title = f'[{getCurrentDate()}] Out of Town Scoreboard'
+    topic_title = f'[{get_current_date()}] Out of Town Scoreboard'
 
-    post_content = createScoresFeed()
+    post_content = create_scores_feed()
     current_time = datetime.now()
     current_time = current_time.strftime('%b %d %Y %I:%M:%S %p')
 
     post_content += f'<p><strong>Last updated: {current_time}</strong></p>'
 
-    
     # check if today's post is already created
     for pinned_topic in list_of_topics:
         if topic_title not in pinned_topic['title']:
@@ -287,7 +286,7 @@ def postThread():
             "author": 2,
             "pinned": 1
         }
-        r = requests.post(url,data=payload)
+        r = requests.post(url, data=payload)
     else:
         # create it if it doesn't exist
         print("Updating post...")
@@ -296,7 +295,7 @@ def postThread():
         payload = {
             "post": post_content
         }
-        r = requests.post(url,data=payload)
+        r = requests.post(url, data=payload)
 
 
-postThread()
+post_thread()
