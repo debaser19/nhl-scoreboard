@@ -31,9 +31,9 @@ def get_series_summaries():
 
 
 def parse_series(series_summaries, current_date):
-    # need to finish loop through each series and each game
-    # need to create separate dict full of games for each series
-    # ie all phl/mtl games from round 1 need to be in single dict
+    # TODO: finish loop through each series and each game
+    #   need to create separate dict full of games for each series
+    #   ie all phl/mtl games from round 1 need to be in single dict
     for series in series_summaries:
         top_seed = series['matchupTeams'][0]
         bottom_seed = series['matchupTeams'][1]
