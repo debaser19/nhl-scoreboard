@@ -30,7 +30,6 @@ def get_series_summaries():
 
 
 def parse_series(series_summaries, current_date):
-    # TODO: need to pull in data for three stars and winning/losing goalies
     series_list = []
     for series in series_summaries:
         top_seed = series['matchupTeams'][0]
@@ -46,9 +45,9 @@ def parse_series(series_summaries, current_date):
             game_endpoint = f'/api/v1/game/{game_pk}/feed/live'
 
             game_feed = requests.get(base_url+game_endpoint).json()
-            linescore = game_feed['liveData']['linescore']
+            live_data = game_feed['liveData']
 
-            series_games.append(linescore)
+            series_games.append(live_data)
 
         series_dict = {
             'series': series,
@@ -61,7 +60,6 @@ def parse_series(series_summaries, current_date):
 
 
 def create_html_strings():
-    # TODO: add in the three stars and goalie decisions to linescore_string
     html_strings = []
     style_string = '''
         <style>
@@ -106,9 +104,7 @@ def create_html_strings():
     for series in parsed_series:
         linescores = ''
         # create the series scoreboard
-        # TODO: fix game number in the string
-        #   if no game scheduled today, game number will be off by 1 until noon on game day
-        series_game_number = series["series"]["currentGame"]["seriesSummary"]["gameNumber"]
+        series_game_number = len(series['linescores'])
         series_name = series["series"]["names"]["matchupName"]
         series_status = series["series"]["currentGame"]["seriesSummary"]["seriesStatus"]
         top_seed_name = series["series"]["matchupTeams"][0]["team"]["name"]
@@ -131,7 +127,7 @@ def create_html_strings():
         for linescore in series['linescores'][::-1]:
             per1HomeGoals = per2HomeGoals = per3HomeGoals = 0
             per1AwayGoals = per2AwayGoals = per3AwayGoals = 0
-            for period in linescore['periods']:
+            for period in linescore['linescore']['periods']:
                 if period['num'] == 1:
                     per1HomeGoals = period['home']['goals']
                     per1AwayGoals = period['away']['goals']
@@ -142,22 +138,50 @@ def create_html_strings():
                     per3HomeGoals = period['home']['goals']
                     per3AwayGoals = period['away']['goals']
 
-            if 'currentPeriodOrdinal' not in linescore:
-                linescore["currentPeriodOrdinal"] = '-'
-                linescore["currentPeriodTimeRemaining"] = '00:00'
+            if 'winner' in linescore['decisions']:
+                goalies_string = f'''
+                <div class="goalies">
+                <ul>
+                <li>W: {linescore["decisions"]["winner"]["fullName"]}</li>
+                <li>L: {linescore["decisions"]["loser"]["fullName"]}</li>
+                </ul>
+                </div>
+                '''
+            else:
+                goalies_string = ''
 
-            totalAwayGoals = linescore['teams']['away']['goals']
-            totalHomeGoals = linescore['teams']['home']['goals']
+            if 'firstStar' in linescore['decisions']:
+                threestars_string = f'''
+                <div class="threestars">
+                <ul>
+                <li>1st Star: {linescore["decisions"]["firstStar"]["fullName"]}</li>
+                <li>2nd Star: {linescore["decisions"]["secondStar"]["fullName"]}</li>
+                <li>3rd Star: {linescore["decisions"]["thirdStar"]["fullName"]}</li>
+                </ul>
+                </div>
+                '''
+            else:
+                threestars_string = ''
 
+            if 'currentPeriodOrdinal' not in linescore['linescore']:
+                linescore['linescore']["currentPeriodOrdinal"] = '-'
+                linescore['linescore']["currentPeriodTimeRemaining"] = '00:00'
+
+            total_away_goals = linescore['linescore']['teams']['away']['goals']
+            total_home_goals = linescore['linescore']['teams']['home']['goals']
+
+            # TODO: fix game status for games that have not started
+            #   need to pull in game status from earlier nhl api call
+            #   and conditionally set value of game state in the string
             linescore_string = f'''
                     <div class="scoreboard-container">
                     <div class="linescore">
                     <div class="headline">
                     <ul>
                     <li>Game {series_game_number}</li>
-                    <li>{linescore['teams']['home']['team']['name']} @ {linescore['teams']['away']['team']['name']}</li>
-                    <li>{linescore["currentPeriodOrdinal"]}</li>
-                    <li>{linescore["currentPeriodTimeRemaining"]}</li>
+                    <li>{linescore["linescore"]['teams']['home']['team']['name']} @ {linescore['linescore']['teams']['away']['team']['name']}</li>
+                    <li>{linescore["linescore"]["currentPeriodOrdinal"]}</li>
+                    <li>{linescore["linescore"]["currentPeriodTimeRemaining"]}</li>
                     </ul>
                     </div>
                     <table>
@@ -172,27 +196,28 @@ def create_html_strings():
                     </thead>
                     <tbody>
                     <tr>
-                    <td>{linescore['teams']['away']['team']['abbreviation']}</td>
+                    <td>{linescore['linescore']['teams']['away']['team']['abbreviation']}</td>
                     <td>{per1AwayGoals}</td>
                     <td>{per2AwayGoals}</td>
                     <td>{per3AwayGoals}</td>
-                    <td><strong>{totalAwayGoals}</strong></td>
+                    <td><strong>{total_away_goals}</strong></td>
                     </tr>
                     <tr>
-                    <td>{linescore['teams']['home']['team']['abbreviation']}</td>
+                    <td>{linescore['linescore']['teams']['home']['team']['abbreviation']}</td>
                     <td>{per1HomeGoals}</td>
                     <td>{per2HomeGoals}</td>
                     <td>{per3HomeGoals}</td>
-                    <td><strong>{totalHomeGoals}</strong></td>
+                    <td><strong>{total_home_goals}</strong></td>
                     </tr>
                     </tbody>
                     </table>
                     </div>
+                    {threestars_string}
+                    {goalies_string}
                     <br/><hr align="left" width="500px"/><br/>
                     '''
 
             linescores += linescore_string
-            series_game_number -= 1
 
             full_series_string = style_string + series_scoreboard_string + linescores
 
@@ -200,6 +225,7 @@ def create_html_strings():
                 'series_name': series_name,
                 'series_string': full_series_string
             }
+            series_game_number -= 1
 
         html_strings.append(series_dict)
 
@@ -211,7 +237,7 @@ def post_threads(html_strings):
     url = f'http://leafsconnected.com/api/forums/topics?key={apikey}'
 
     payload = {
-        "forums": [56],
+        "forums": [55],
         "pinned": 1
     }
 
@@ -226,8 +252,6 @@ def post_threads(html_strings):
             "title": topic['title']
         }
         list_of_topics.append(topic_dict)
-
-    print(list_of_topics)
 
     for string in html_strings:
         # check if topic already created
@@ -249,7 +273,7 @@ def post_threads(html_strings):
         if not topic_exists:
             print(f'Creating topic: {topic_title}')
             payload = {
-                "forum": 56,
+                "forum": 55,
                 "title": topic_title,
                 "post": post_content,
                 "author": 2,
@@ -258,8 +282,10 @@ def post_threads(html_strings):
             requests.post(url, data=payload)
         else:
             # create it if it doesn't exist
-            print(f"Updating post: {topic_title}")
-            post_id = topic['firstPost']['id']
+            for topic in topics:
+                if topic['title'] == topic_title:
+                    post_id = topic['firstPost']['id']
+            print(f"Updating post: {topic_title} - ID: {post_id}")
             url = f'http://leafsconnected.com/api/forums/posts/{post_id}?key={apikey}'
             payload = {
                 "post": post_content
