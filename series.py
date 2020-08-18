@@ -106,6 +106,8 @@ def create_html_strings():
     for series in parsed_series:
         linescores = ''
         # create the series scoreboard
+        # TODO: fix game number in the string
+        #   if no game scheduled today, game number will be off by 1 until noon on game day
         series_game_number = series["series"]["currentGame"]["seriesSummary"]["gameNumber"]
         series_name = series["series"]["names"]["matchupName"]
         series_status = series["series"]["currentGame"]["seriesSummary"]["seriesStatus"]
